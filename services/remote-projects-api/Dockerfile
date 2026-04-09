@@ -1,4 +1,4 @@
-FROM --platform=${BUILDPLATFORM} node:18 AS build
+FROM --platform=${BUILDPLATFORM} node:20 AS build
 
 WORKDIR /opt/node_app
 
@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/root/.cache/yarn \
 
 RUN npm_config_target_arch=${TARGETARCH} yarn build:remote-projects-api
 
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /opt/node_app
 
