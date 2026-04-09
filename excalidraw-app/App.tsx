@@ -147,6 +147,34 @@ import "./index.scss";
 
 import { ExcalidrawPlusPromoBanner } from "./components/ExcalidrawPlusPromoBanner";
 import { AppSidebar } from "./components/AppSidebar";
+import { ProjectFilesPage } from "./components/Projects/ProjectFilesPage";
+import { ProjectsDialog } from "./components/Projects/ProjectsDialog";
+import { ProjectsPage } from "./components/Projects/ProjectsPage";
+import {
+  createProject,
+  createProjectFile,
+  getProjectFile,
+  listProjectFiles,
+  listProjects,
+  saveProjectFile,
+} from "./remote-projects/api";
+import {
+  getProjectFilePath,
+  getProjectPath,
+  getRemoteProjectRouteState,
+} from "./remote-projects/store";
+import { createRemoteAutoSaveController } from "./remote-projects/autosave";
+import {
+  deserializeRemoteProjectScene,
+  serializeRemoteProjectScene,
+} from "./remote-projects/scene";
+import "./components/Projects/Projects.scss";
+
+import type {
+  RemoteProject,
+  RemoteProjectFile,
+  RemoteProjectScene,
+} from "./remote-projects/types";
 
 import type { CollabAPI } from "./collab/Collab";
 
@@ -213,7 +241,7 @@ const shareableLinkConfirmDialog = {
   color: "danger",
 } as const;
 
-const initializeScene = async (opts: {
+export const initializeScene = async (opts: {
   collabAPI: CollabAPI | null;
   excalidrawAPI: ExcalidrawImperativeAPI;
 }): Promise<
@@ -230,6 +258,7 @@ const initializeScene = async (opts: {
   const externalUrlMatch = window.location.hash.match(/^#url=(.*)$/);
 
   const localDataState = importFromLocalStorage();
+  const routeState = getRemoteProjectRouteState(window.location.pathname);
 
   let scene: Omit<
     RestoredDataState,
@@ -248,6 +277,41 @@ const initializeScene = async (opts: {
 
   let roomLinkData = getCollaborationLinkData(window.location.href);
   const isExternalScene = !!(id || jsonBackendMatch || roomLinkData);
+  if (routeState.mode === "file") {
+    try {
+      const remoteFile = await getProjectFile(
+        routeState.projectId,
+        routeState.fileId,
+      );
+      const scene = deserializeRemoteProjectScene(remoteFile.scene);
+
+      return {
+        scene: {
+          elements: restoreElements(scene.elements as any, null, {
+            repairBindings: true,
+            deleteInvisibleElements: true,
+          }),
+          appState: restoreAppState(
+            scene.appState as any,
+            localDataState?.appState,
+          ),
+          files: scene.files as any,
+          scrollToContent: true,
+        },
+        isExternalScene: false,
+      };
+    } catch (error) {
+      return {
+        scene: {
+          appState: {
+            errorMessage: t("alerts.importBackendFailed"),
+          },
+        },
+        isExternalScene: false,
+      };
+    }
+  }
+
   if (isExternalScene) {
     if (
       // don't prompt if scene is empty
@@ -371,17 +435,67 @@ const initializeScene = async (opts: {
   return { scene: null, isExternalScene: false };
 };
 
-const ExcalidrawWrapper = () => {
+type RemoteAutoSaveController = {
+  queue: (value: RemoteProjectScene) => boolean;
+  flushNow: (value?: RemoteProjectScene) => Promise<boolean>;
+  dispose: () => void;
+};
+
+const ExcalidrawWrapper = ({
+  onProjectsDialogOpen,
+  isProjectsDialogOpen,
+  projects,
+  projectFiles,
+  selectedDialogProjectId,
+  isProjectsLoading,
+  isProjectFilesLoading,
+  projectsError,
+  projectFilesError,
+  onProjectsDialogClose,
+  onCreateProjectFromDialog,
+  onOpenProjectFromDialog,
+  onBackToProjectsFromDialog,
+  onCreateFileFromDialog,
+  onOpenFileFromDialog,
+}: {
+  onProjectsDialogOpen: () => void;
+  isProjectsDialogOpen: boolean;
+  projects: RemoteProject[];
+  projectFiles: RemoteProjectFile[];
+  selectedDialogProjectId: string | null;
+  isProjectsLoading: boolean;
+  isProjectFilesLoading: boolean;
+  projectsError: string | null;
+  projectFilesError: string | null;
+  onProjectsDialogClose: () => void;
+  onCreateProjectFromDialog: (name: string) => void;
+  onOpenProjectFromDialog: (projectId: string) => void;
+  onBackToProjectsFromDialog: () => void;
+  onCreateFileFromDialog: (name: string) => void;
+  onOpenFileFromDialog: (fileId: string) => void;
+}) => {
   const excalidrawAPI = useExcalidrawAPI();
+  const routeState = getRemoteProjectRouteState(window.location.pathname);
+  const remoteRouteProjectId =
+    routeState.mode === "file" ? routeState.projectId : null;
+  const remoteRouteFileId =
+    routeState.mode === "file" ? routeState.fileId : null;
+  const activeRemoteProjectName =
+    routeState.mode === "file" ? routeState.projectId : null;
+  const activeRemoteFileName =
+    routeState.mode === "file" ? routeState.fileId : null;
+  const [remoteSaveStatus, setRemoteSaveStatus] = useState<string | null>(null);
 
   const [errorMessage, setErrorMessage] = useState("");
   const isCollabDisabled = isRunningInIframe();
+  const remoteAutoSaveRef = useRef<RemoteAutoSaveController | null>(null);
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
 
   const [langCode, setLangCode] = useAppLangCode();
 
   const editorInterface = useEditorInterface();
+  const lastLoadedRouteRef = useRef<string | null>(null);
 
   // initial state
   // ---------------------------------------------------------------------------
@@ -527,6 +641,7 @@ const ExcalidrawWrapper = () => {
 
     initializeScene({ collabAPI, excalidrawAPI }).then(async (data) => {
       loadImages(data, /* isInitialLoad */ true);
+      lastLoadedRouteRef.current = window.location.pathname;
       initialStatePromiseRef.current.promise.resolve(data.scene);
     });
 
@@ -651,6 +766,45 @@ const ExcalidrawWrapper = () => {
   }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode, loadImages]);
 
   useEffect(() => {
+    if (!excalidrawAPI || (!isCollabDisabled && !collabAPI)) {
+      return;
+    }
+
+    const currentPath = window.location.pathname;
+    if (lastLoadedRouteRef.current === null) {
+      return;
+    }
+    if (lastLoadedRouteRef.current === currentPath) {
+      return;
+    }
+
+    lastLoadedRouteRef.current = currentPath;
+    excalidrawAPI.updateScene({ appState: { isLoading: true } });
+
+    void initializeScene({ collabAPI, excalidrawAPI }).then((data) => {
+      loadImages(data);
+      excalidrawAPI.resetScene();
+      if (data.scene) {
+        excalidrawAPI.updateScene({
+          elements: restoreElements(data.scene.elements, null, {
+            repairBindings: true,
+          }),
+          appState: restoreAppState(data.scene.appState, null),
+          captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+        });
+      }
+    });
+  }, [
+    collabAPI,
+    excalidrawAPI,
+    isCollabDisabled,
+    loadImages,
+    routeState.mode,
+    remoteRouteFileId,
+    remoteRouteProjectId,
+  ]);
+
+  useEffect(() => {
     const unloadHandler = (event: BeforeUnloadEvent) => {
       LocalData.flushSave();
 
@@ -675,11 +829,123 @@ const ExcalidrawWrapper = () => {
     };
   }, [excalidrawAPI]);
 
+  useEffect(() => {
+    remoteAutoSaveRef.current?.dispose();
+    remoteAutoSaveRef.current = null;
+
+    if (routeState.mode !== "file") {
+      setRemoteSaveStatus(null);
+      return;
+    }
+
+    const projectId = remoteRouteProjectId!;
+    const fileId = remoteRouteFileId!;
+
+    setRemoteSaveStatus("Saved");
+    remoteAutoSaveRef.current =
+      createRemoteAutoSaveController<RemoteProjectScene>({
+        intervalMs: 10000,
+        getSignature: (scene) => JSON.stringify(scene),
+        save: async (scene) => {
+          setRemoteSaveStatus("Saving...");
+          try {
+            await saveProjectFile(projectId, fileId, scene);
+            setRemoteSaveStatus("Saved");
+          } catch (error) {
+            console.error(error);
+            setRemoteSaveStatus("Save failed");
+            throw error;
+          }
+        },
+      });
+
+    return () => {
+      remoteAutoSaveRef.current?.dispose();
+      remoteAutoSaveRef.current = null;
+    };
+  }, [routeState.mode, remoteRouteFileId, remoteRouteProjectId]);
+
+  const saveRemoteScene = useCallback(
+    async (
+      elements: readonly OrderedExcalidrawElement[],
+      appState: AppState,
+      files: BinaryFiles,
+      options?: {
+        force?: boolean;
+      },
+    ) => {
+      if (routeState.mode !== "file") {
+        return false;
+      }
+
+      const controller = remoteAutoSaveRef.current;
+      if (!controller) {
+        return false;
+      }
+
+      const scene = {
+        elements,
+        appState,
+        files,
+      };
+      const serializedScene = serializeRemoteProjectScene(scene);
+
+      const didSave = options?.force
+        ? await controller.flushNow(serializedScene)
+        : controller.queue(serializedScene);
+
+      if (options?.force) {
+        if (didSave) {
+          excalidrawAPI?.setToast({ message: "Saved to remote file" });
+        } else {
+          excalidrawAPI?.setToast({ message: "No changes to save" });
+        }
+      }
+
+      return didSave;
+    },
+    [excalidrawAPI, routeState.mode],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        routeState.mode !== "file" ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.key.toLowerCase() !== "s"
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      try {
+        void saveRemoteScene(
+          excalidrawAPI?.getSceneElementsIncludingDeleted() || [],
+          (excalidrawAPI?.getAppState() as AppState | undefined) ||
+            (getDefaultAppState() as AppState),
+          excalidrawAPI?.getFiles() || {},
+          { force: true },
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [excalidrawAPI, routeState.mode, saveRemoteScene]);
+
   const onChange = (
     elements: readonly OrderedExcalidrawElement[],
     appState: AppState,
     files: BinaryFiles,
   ) => {
+    if (routeState.mode === "file") {
+      void saveRemoteScene(elements, appState, files);
+    }
+
     if (collabAPI?.isCollaborating()) {
       collabAPI.syncElements(elements);
     }
@@ -985,16 +1251,39 @@ const ExcalidrawWrapper = () => {
       >
         <AppMainMenu
           onCollabDialogOpen={onCollabDialogOpen}
+          onProjectsDialogOpen={onProjectsDialogOpen}
           isCollaborating={isCollaborating}
           isCollabEnabled={!isCollabDisabled}
           theme={appTheme}
           setTheme={(theme) => setAppTheme(theme)}
           refresh={() => forceRefresh((prev) => !prev)}
         />
-        <AppWelcomeScreen
-          onCollabDialogOpen={onCollabDialogOpen}
-          isCollabEnabled={!isCollabDisabled}
-        />
+        <div
+          style={isProjectsDialogOpen ? { pointerEvents: "none" } : undefined}
+        >
+          <AppWelcomeScreen
+            onCollabDialogOpen={onCollabDialogOpen}
+            onProjectsDialogOpen={onProjectsDialogOpen}
+            isCollabEnabled={!isCollabDisabled}
+          />
+        </div>
+        {isProjectsDialogOpen && (
+          <ProjectsDialog
+            projects={projects}
+            files={projectFiles}
+            selectedProjectId={selectedDialogProjectId}
+            isProjectsLoading={isProjectsLoading}
+            isFilesLoading={isProjectFilesLoading}
+            projectsError={projectsError}
+            filesError={projectFilesError}
+            onCloseRequest={onProjectsDialogClose}
+            onCreateProject={onCreateProjectFromDialog}
+            onOpenProject={onOpenProjectFromDialog}
+            onBackToProjects={onBackToProjectsFromDialog}
+            onCreateFile={onCreateFileFromDialog}
+            onOpenFile={onOpenFileFromDialog}
+          />
+        )}
         <OverwriteConfirmDialog>
           <OverwriteConfirmDialog.Actions.ExportToImage />
           <OverwriteConfirmDialog.Actions.SaveToDisk />
@@ -1015,7 +1304,12 @@ const ExcalidrawWrapper = () => {
             </OverwriteConfirmDialog.Action>
           )}
         </OverwriteConfirmDialog>
-        <AppFooter onChange={() => excalidrawAPI?.refresh()} />
+        <AppFooter
+          onChange={() => excalidrawAPI?.refresh()}
+          remoteProjectName={activeRemoteProjectName}
+          remoteFileName={activeRemoteFileName}
+          remoteSaveStatus={remoteSaveStatus}
+        />
         {excalidrawAPI && <AIComponents excalidrawAPI={excalidrawAPI} />}
 
         <TTDDialogTrigger />
@@ -1269,15 +1563,254 @@ const ExcalidrawWrapper = () => {
 const ExcalidrawApp = () => {
   const isCloudExportWindow =
     window.location.pathname === "/excalidraw-plus-export";
+  const [routePath, setRoutePath] = useState(window.location.pathname);
+  const [projects, setProjects] = useState<RemoteProject[]>([]);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [isProjectsLoading, setIsProjectsLoading] = useState(false);
+  const [projectFiles, setProjectFiles] = useState<RemoteProjectFile[]>([]);
+  const [projectFilesError, setProjectFilesError] = useState<string | null>(
+    null,
+  );
+  const [isProjectFilesLoading, setIsProjectFilesLoading] = useState(false);
+  const [isProjectsDialogOpen, setIsProjectsDialogOpen] = useState(false);
+  const [selectedDialogProjectId, setSelectedDialogProjectId] = useState<
+    string | null
+  >(null);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setRoutePath(window.location.pathname);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  const navigateTo = useCallback((pathname: string) => {
+    window.history.pushState({}, "", pathname);
+    setRoutePath(pathname);
+  }, []);
+
+  const routeState = getRemoteProjectRouteState(routePath);
+  const routeProjectId =
+    routeState.mode === "project" ? routeState.projectId : null;
+
+  useEffect(() => {
+    if (routeState.mode !== "projects" && !isProjectsDialogOpen) {
+      return;
+    }
+
+    let cancelled = false;
+
+    setIsProjectsLoading(true);
+    setProjectsError(null);
+    void listProjects()
+      .then((items) => {
+        if (!cancelled) {
+          setProjects(items);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setProjectsError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsProjectsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeState.mode, isProjectsDialogOpen]);
+
+  useEffect(() => {
+    const activeProjectId = selectedDialogProjectId ?? routeProjectId;
+
+    if (!activeProjectId) {
+      if (selectedDialogProjectId === null) {
+        setProjectFiles((currentFiles) =>
+          currentFiles.length === 0 ? currentFiles : [],
+        );
+        setProjectFilesError((currentError) =>
+          currentError === null ? currentError : null,
+        );
+        setIsProjectFilesLoading((isLoading) =>
+          isLoading ? false : isLoading,
+        );
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    setIsProjectFilesLoading(true);
+    setProjectFilesError(null);
+    void listProjectFiles(activeProjectId)
+      .then((items) => {
+        if (!cancelled) {
+          setProjectFiles(items);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setProjectFilesError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsProjectFilesLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeState.mode, routeProjectId, selectedDialogProjectId]);
+
+  useEffect(() => {
+    if (!isProjectsDialogOpen) {
+      setSelectedDialogProjectId(null);
+      setProjectFiles([]);
+      setProjectFilesError(null);
+      setIsProjectFilesLoading(false);
+    }
+  }, [isProjectsDialogOpen]);
+
   if (isCloudExportWindow) {
     return <ExcalidrawPlusIframeExport />;
+  }
+
+  if (routeState.mode === "projects") {
+    return (
+      <ProjectsPage
+        projects={projects}
+        isLoading={isProjectsLoading}
+        errorMessage={projectsError}
+        onCreateProject={(name) => {
+          void createProject(name)
+            .then((project) => {
+              setProjects((currentProjects) => [...currentProjects, project]);
+              navigateTo(getProjectPath(project.id));
+            })
+            .catch((error) => {
+              setProjectsError(
+                error instanceof Error ? error.message : String(error),
+              );
+            });
+        }}
+        onOpenProject={(projectId) => {
+          navigateTo(getProjectPath(projectId));
+        }}
+      />
+    );
+  }
+
+  if (routeState.mode === "project") {
+    return (
+      <ProjectFilesPage
+        projectName={routeState.projectId}
+        files={projectFiles}
+        isLoading={isProjectFilesLoading}
+        errorMessage={projectFilesError}
+        onCreateFile={(name) => {
+          void createProjectFile(routeState.projectId, name)
+            .then((file) => {
+              setProjectFiles((currentFiles) => [...currentFiles, file]);
+              navigateTo(getProjectFilePath(routeState.projectId, file.id));
+            })
+            .catch((error) => {
+              setProjectFilesError(
+                error instanceof Error ? error.message : String(error),
+              );
+            });
+        }}
+        onOpenFile={(fileId) => {
+          navigateTo(getProjectFilePath(routeState.projectId, fileId));
+        }}
+      />
+    );
   }
 
   return (
     <TopErrorBoundary>
       <Provider store={appJotaiStore}>
         <ExcalidrawAPIProvider>
-          <ExcalidrawWrapper />
+          <ExcalidrawWrapper
+            onProjectsDialogOpen={() => {
+              setSelectedDialogProjectId(
+                routeState.mode === "file" ? routeState.projectId : null,
+              );
+              setIsProjectsDialogOpen(true);
+            }}
+            isProjectsDialogOpen={isProjectsDialogOpen}
+            projects={projects}
+            projectFiles={projectFiles}
+            selectedDialogProjectId={selectedDialogProjectId}
+            isProjectsLoading={isProjectsLoading}
+            isProjectFilesLoading={isProjectFilesLoading}
+            projectsError={projectsError}
+            projectFilesError={projectFilesError}
+            onProjectsDialogClose={() => setIsProjectsDialogOpen(false)}
+            onCreateProjectFromDialog={(name) => {
+              void createProject(name)
+                .then((project) => {
+                  setProjects((currentProjects) => [
+                    ...currentProjects,
+                    project,
+                  ]);
+                  setSelectedDialogProjectId(project.id);
+                })
+                .catch((error) => {
+                  setProjectsError(
+                    error instanceof Error ? error.message : String(error),
+                  );
+                });
+            }}
+            onOpenProjectFromDialog={(projectId) => {
+              setSelectedDialogProjectId(projectId);
+            }}
+            onBackToProjectsFromDialog={() => {
+              setSelectedDialogProjectId(null);
+              setProjectFiles([]);
+              setProjectFilesError(null);
+            }}
+            onCreateFileFromDialog={(name) => {
+              if (!selectedDialogProjectId) {
+                return;
+              }
+
+              void createProjectFile(selectedDialogProjectId, name)
+                .then((file) => {
+                  setProjectFiles((currentFiles) => [...currentFiles, file]);
+                  setIsProjectsDialogOpen(false);
+                  navigateTo(
+                    getProjectFilePath(selectedDialogProjectId, file.id),
+                  );
+                })
+                .catch((error) => {
+                  setProjectFilesError(
+                    error instanceof Error ? error.message : String(error),
+                  );
+                });
+            }}
+            onOpenFileFromDialog={(fileId) => {
+              if (!selectedDialogProjectId) {
+                return;
+              }
+
+              setIsProjectsDialogOpen(false);
+              navigateTo(getProjectFilePath(selectedDialogProjectId, fileId));
+            }}
+          />
         </ExcalidrawAPIProvider>
       </Provider>
     </TopErrorBoundary>

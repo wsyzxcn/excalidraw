@@ -94,6 +94,30 @@ yarn add react react-dom @excalidraw/excalidraw
 
 Check out our [documentation](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/installation) for more details!
 
+## Remote Projects Development
+
+This fork also includes a file-system-backed remote projects flow for the app layer.
+
+By default, local development stores remote-project data in `data/projects` under the workspace root.
+
+You can override that location by setting `EXCALIDRAW_PROJECTS_ROOT` before starting the app:
+
+```bash
+cd /Users/staky/workspace/excalidraw
+EXCALIDRAW_PROJECTS_ROOT=/tmp/excalidraw-projects COREPACK_HOME=/tmp/corepack corepack yarn start
+```
+
+The Vite dev server will expose:
+
+- `GET /api/projects`
+- `POST /api/projects`
+- `GET /api/projects/:projectId/files`
+- `POST /api/projects/:projectId/files`
+- `GET /api/projects/:projectId/files/:fileId`
+- `PUT /api/projects/:projectId/files/:fileId`
+
+Each project is a directory under `EXCALIDRAW_PROJECTS_ROOT`, and each file is persisted as a `.excalidraw` JSON file inside that directory.
+
 ## Contributing
 
 - Missing something or found a bug? [Report here](https://github.com/excalidraw/excalidraw/issues).

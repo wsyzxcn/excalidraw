@@ -1,0 +1,84 @@
+.remote-projects-page {
+  margin: 0 auto;
+  max-width: 56rem;
+  padding: 2rem 1.5rem 4rem;
+}
+
+.remote-projects-page--dialog {
+  max-width: none;
+  padding: 0;
+}
+
+.remote-projects-page__create {
+  display: flex;
+  gap: 0.75rem;
+  margin: 1rem 0 1.5rem;
+  align-items: flex-end;
+}
+
+.remote-projects-page__create input {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.remote-projects-page__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.remote-projects-page__listButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  border: 1px solid var(--default-border-color);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-low);
+  color: var(--color-on-surface);
+  padding: 0.875rem 1rem;
+}
+
+.remote-projects-page__listButton:hover {
+  background: var(--color-surface-mid);
+}
+
+.remote-projects-page__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.remote-projects-page__backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--default-border-color);
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-on-surface);
+  padding: 0.5rem 0.75rem;
+}
+
+.remote-projects-page__backIcon,
+.remote-projects-page__listIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-on-surface-variant);
+}
+
+.remote-projects-page__listIcon svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.remote-projects-page__subtitle {
+  color: var(--color-on-surface-variant);
+  font-size: 0.95rem;
+}

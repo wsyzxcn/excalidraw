@@ -14,9 +14,11 @@ import { LanguageList } from "../app-language/LanguageList";
 import { isExcalidrawPlusSignedUser } from "../app_constants";
 
 import { saveDebugState } from "./DebugCanvas";
+import { ProjectsIcon } from "./Projects/ProjectsIcon";
 
 export const AppMainMenu: React.FC<{
   onCollabDialogOpen: () => any;
+  onProjectsDialogOpen: () => any;
   isCollaborating: boolean;
   isCollabEnabled: boolean;
   theme: Theme | "system";
@@ -25,6 +27,12 @@ export const AppMainMenu: React.FC<{
 }> = React.memo((props) => {
   return (
     <MainMenu>
+      <MainMenu.Item
+        icon={<ProjectsIcon />}
+        onSelect={() => props.onProjectsDialogOpen()}
+      >
+        Projects
+      </MainMenu.Item>
       <MainMenu.DefaultItems.LoadScene />
       <MainMenu.DefaultItems.SaveToActiveFile />
       <MainMenu.DefaultItems.Export />

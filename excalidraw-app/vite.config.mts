@@ -8,6 +8,7 @@ import checker from "vite-plugin-checker";
 import { createHtmlPlugin } from "vite-plugin-html";
 import Sitemap from "vite-plugin-sitemap";
 import { woff2BrowserPlugin } from "../scripts/woff2/woff2-vite-plugins";
+import { viteRemoteProjectsApi } from "./server/viteRemoteProjectsApi";
 export default defineConfig(({ mode }) => {
   // To load .env variables
   const envVars = loadEnv(mode, `../`);
@@ -305,6 +306,7 @@ export default defineConfig(({ mode }) => {
       createHtmlPlugin({
         minify: true,
       }),
+      viteRemoteProjectsApi(),
     ],
     publicDir: "../public",
   };
