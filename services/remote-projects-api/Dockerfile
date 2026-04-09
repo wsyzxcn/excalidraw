@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/root/.cache/yarn \
 
 RUN npm_config_target_arch=${TARGETARCH} yarn build:remote-projects-api
 
-FROM --platform=${TARGETPLATFORM} node:18-alpine
+FROM node:18-alpine
 
 WORKDIR /opt/node_app
 
