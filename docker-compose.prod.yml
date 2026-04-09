@@ -1,8 +1,5 @@
 services:
   remote-projects-api:
-    build:
-      context: .
-      dockerfile: services/remote-projects-api/Dockerfile
     image: excalidraw/remote-projects-api:${TAG}
     container_name: excalidraw-remote-projects-api
     restart: unless-stopped
