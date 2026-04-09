@@ -246,6 +246,19 @@ exports[`Test MobileMenu > should initialize with welcome screen and hide once u
         Sign up
       </div>
     </a>
+    <button
+      class="welcome-screen-menu-item "
+      type="button"
+    >
+      <div
+        class="welcome-screen-menu-item__icon"
+      />
+      <div
+        class="welcome-screen-menu-item__text"
+      >
+        Projects
+      </div>
+    </button>
   </div>
 </div>
 `;

@@ -6,8 +6,11 @@ import React from "react";
 
 import { isExcalidrawPlusSignedUser } from "../app_constants";
 
+import { ProjectsIcon } from "./Projects/ProjectsIcon";
+
 export const AppWelcomeScreen: React.FC<{
   onCollabDialogOpen: () => any;
+  onProjectsDialogOpen: () => any;
   isCollabEnabled: boolean;
 }> = React.memo((props) => {
   const { t } = useI18n();
@@ -75,6 +78,13 @@ export const AppWelcomeScreen: React.FC<{
               Sign up
             </WelcomeScreen.Center.MenuItemLink>
           )}
+          <WelcomeScreen.Center.MenuItem
+            shortcut={null}
+            icon={<ProjectsIcon />}
+            onSelect={() => props.onProjectsDialogOpen()}
+          >
+            Projects
+          </WelcomeScreen.Center.MenuItem>
         </WelcomeScreen.Center.Menu>
       </WelcomeScreen.Center>
     </WelcomeScreen>
