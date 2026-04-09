@@ -5,10 +5,12 @@
 !.npmrc
 !.prettierrc
 !excalidraw-app/
+!nginx/
 !package.json
 !public/
 !packages/
 !scripts/
+!services/
 !tsconfig.json
 !yarn.lock
 

@@ -100,14 +100,23 @@ This fork also includes a file-system-backed remote projects flow for the app la
 
 By default, local development stores remote-project data in `data/projects` under the workspace root.
 
-You can override that location by setting `EXCALIDRAW_PROJECTS_ROOT` before starting the app:
+The remote-projects API now runs as a dedicated NestJS service in `services/remote-projects-api`.
+
+Start the API service:
 
 ```bash
 cd /Users/staky/workspace/excalidraw
-EXCALIDRAW_PROJECTS_ROOT=/tmp/excalidraw-projects COREPACK_HOME=/tmp/corepack corepack yarn start
+EXCALIDRAW_PROJECTS_ROOT=/tmp/excalidraw-projects COREPACK_HOME=/tmp/corepack corepack yarn start:remote-projects-api
 ```
 
-The Vite dev server will expose:
+Start the app in a second terminal:
+
+```bash
+cd /Users/staky/workspace/excalidraw
+VITE_REMOTE_PROJECTS_API_URL=http://127.0.0.1:4000 COREPACK_HOME=/tmp/corepack corepack yarn start
+```
+
+The frontend proxies remote-project requests to the NestJS service. The API exposes:
 
 - `GET /api/projects`
 - `POST /api/projects`
@@ -117,6 +126,21 @@ The Vite dev server will expose:
 - `PUT /api/projects/:projectId/files/:fileId`
 
 Each project is a directory under `EXCALIDRAW_PROJECTS_ROOT`, and each file is persisted as a `.excalidraw` JSON file inside that directory.
+
+## Remote Projects With Docker
+
+The repository now includes a two-container setup:
+
+- `excalidraw`: static frontend served by nginx
+- `remote-projects-api`: NestJS API for project and file storage
+
+Run both services with:
+
+```bash
+docker compose up --build
+```
+
+By default, the backend writes project data to `/data/projects` inside the API container, backed by the `remote_projects_data` volume.
 
 ## Contributing
 

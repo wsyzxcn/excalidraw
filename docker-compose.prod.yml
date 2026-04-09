@@ -1,0 +1,21 @@
+services:
+  remote-projects-api:
+    image: excalidraw/remote-projects-api:${TAG}
+    container_name: excalidraw-remote-projects-api
+    restart: unless-stopped
+    environment:
+      - PORT=4000
+      - EXCALIDRAW_PROJECTS_ROOT=/data/projects
+    volumes:
+      - /home/staky/data/excalidraw/projects/:/data/
+
+  excalidraw:
+    image: excalidraw/excalidraw:${TAG}
+    container_name: excalidraw
+    ports:
+      - "5000:80"
+    restart: unless-stopped
+    depends_on:
+      - remote-projects-api
+    environment:
+      - REMOTE_PROJECTS_API_UPSTREAM=http://remote-projects-api:4000

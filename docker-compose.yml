@@ -1,23 +1,32 @@
 services:
+  remote-projects-api:
+    build:
+      context: .
+      dockerfile: services/remote-projects-api/Dockerfile
+    container_name: excalidraw-remote-projects-api
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      EXCALIDRAW_PROJECTS_ROOT: /data/projects
+    expose:
+      - "4000"
+    volumes:
+      - remote_projects_data:/data/projects
+
   excalidraw:
     build:
       context: .
+      dockerfile: Dockerfile
       args:
-        - NODE_ENV=development
+        NODE_ENV: production
     container_name: excalidraw
+    restart: unless-stopped
+    depends_on:
+      - remote-projects-api
+    environment:
+      REMOTE_PROJECTS_API_UPSTREAM: http://remote-projects-api:4000
     ports:
       - "3000:80"
-    restart: on-failure
-    stdin_open: true
-    healthcheck:
-      disable: true
-    environment:
-      - NODE_ENV=development
-    volumes:
-      - ./:/opt/node_app/app:delegated
-      - ./package.json:/opt/node_app/package.json
-      - ./yarn.lock:/opt/node_app/yarn.lock
-      - notused:/opt/node_app/app/node_modules
 
 volumes:
-  notused:
+  remote_projects_data:

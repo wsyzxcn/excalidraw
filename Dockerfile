@@ -16,5 +16,8 @@ RUN npm_config_target_arch=${TARGETARCH} yarn build:app:docker
 FROM --platform=${TARGETPLATFORM} nginx:1.27-alpine
 
 COPY --from=build /opt/node_app/excalidraw-app/build /usr/share/nginx/html
+COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+
+ENV REMOTE_PROJECTS_API_UPSTREAM=http://remote-projects-api:4000
 
 HEALTHCHECK CMD wget -q -O /dev/null http://localhost || exit 1
